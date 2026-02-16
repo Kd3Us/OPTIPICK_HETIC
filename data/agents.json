@@ -1,0 +1,16 @@
+[
+  {
+    "id": "R1",
+    "type": "robot",
+    "capacity_weight": 20,
+    "capacity_volume": 30,
+    "speed": 2.0,
+    "cost_per_hour": 5,
+    "restrictions": {
+      "no_zones": ["C"],
+      "no_fragile": true,
+      "max_item_weight": 10
+    }
+  },
+]
+
