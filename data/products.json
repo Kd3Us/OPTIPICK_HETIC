@@ -1,0 +1,222 @@
+[
+  {
+    "id": "P001",
+    "name": "Laptop Dell XPS",
+    "category": "electronics",
+    "weight": 2.5,
+    "volume": 8.0,
+    "location": [1, 1],
+    "frequency": "high",
+    "fragile": true,
+    "incompatible_with": ["P015", "P016"]
+  },
+  {
+    "id": "P002",
+    "name": "USB Cable",
+    "category": "electronics",
+    "weight": 0.1,
+    "volume": 0.5,
+    "location": [2, 1],
+    "frequency": "very_high",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P003",
+    "name": "Wireless Mouse",
+    "category": "electronics",
+    "weight": 0.3,
+    "volume": 1.0,
+    "location": [3, 1],
+    "frequency": "high",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P004",
+    "name": "Mechanical Keyboard",
+    "category": "electronics",
+    "weight": 1.2,
+    "volume": 3.5,
+    "location": [4, 1],
+    "frequency": "medium",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P005",
+    "name": "Monitor 27 inch",
+    "category": "electronics",
+    "weight": 5.5,
+    "volume": 15.0,
+    "location": [1, 3],
+    "frequency": "medium",
+    "fragile": true,
+    "incompatible_with": ["P015", "P016"]
+  },
+  {
+    "id": "P006",
+    "name": "Python Programming Book",
+    "category": "book",
+    "weight": 0.8,
+    "volume": 2.0,
+    "location": [5, 0],
+    "frequency": "high",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P007",
+    "name": "Algorithm Design Manual",
+    "category": "book",
+    "weight": 1.0,
+    "volume": 2.5,
+    "location": [6, 0],
+    "frequency": "medium",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P008",
+    "name": "Clean Code",
+    "category": "book",
+    "weight": 0.7,
+    "volume": 1.8,
+    "location": [7, 0],
+    "frequency": "high",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P009",
+    "name": "Headphones",
+    "category": "electronics",
+    "weight": 0.5,
+    "volume": 2.5,
+    "location": [2, 3],
+    "frequency": "high",
+    "fragile": true,
+    "incompatible_with": []
+  },
+  {
+    "id": "P010",
+    "name": "USB Hub",
+    "category": "electronics",
+    "weight": 0.4,
+    "volume": 1.5,
+    "location": [3, 3],
+    "frequency": "medium",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P011",
+    "name": "Organic Pasta",
+    "category": "food",
+    "weight": 0.5,
+    "volume": 1.0,
+    "location": [8, 0],
+    "frequency": "high",
+    "fragile": false,
+    "incompatible_with": ["P015", "P016", "P017"]
+  },
+  {
+    "id": "P012",
+    "name": "Olive Oil",
+    "category": "food",
+    "weight": 1.0,
+    "volume": 1.5,
+    "location": [9, 0],
+    "frequency": "high",
+    "fragile": true,
+    "incompatible_with": ["P015", "P016", "P017"]
+  },
+  {
+    "id": "P013",
+    "name": "Fresh Milk",
+    "category": "food",
+    "weight": 1.2,
+    "volume": 2.0,
+    "location": [8, 1],
+    "frequency": "very_high",
+    "fragile": false,
+    "incompatible_with": ["P015", "P016", "P017"]
+  },
+  {
+    "id": "P014",
+    "name": "Cheese",
+    "category": "food",
+    "weight": 0.3,
+    "volume": 0.5,
+    "location": [9, 1],
+    "frequency": "medium",
+    "fragile": false,
+    "incompatible_with": ["P015", "P016", "P017"]
+  },
+  {
+    "id": "P015",
+    "name": "Detergent",
+    "category": "chemical",
+    "weight": 1.5,
+    "volume": 3.0,
+    "location": [1, 6],
+    "frequency": "medium",
+    "fragile": false,
+    "incompatible_with": ["P001", "P005", "P009", "P011", "P012", "P013", "P014"]
+  },
+  {
+    "id": "P016",
+    "name": "Bleach",
+    "category": "chemical",
+    "weight": 2.0,
+    "volume": 3.5,
+    "location": [2, 6],
+    "frequency": "low",
+    "fragile": true,
+    "incompatible_with": ["P001", "P005", "P009", "P011", "P012", "P013", "P014"]
+  },
+  {
+    "id": "P017",
+    "name": "Glass Cleaner",
+    "category": "chemical",
+    "weight": 0.8,
+    "volume": 1.5,
+    "location": [3, 6],
+    "frequency": "medium",
+    "fragile": false,
+    "incompatible_with": ["P011", "P012", "P013", "P014"]
+  },
+  {
+    "id": "P018",
+    "name": "T-Shirt Cotton",
+    "category": "textile",
+    "weight": 0.2,
+    "volume": 1.0,
+    "location": [5, 6],
+    "frequency": "high",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P019",
+    "name": "Jeans",
+    "category": "textile",
+    "weight": 0.6,
+    "volume": 2.0,
+    "location": [6, 6],
+    "frequency": "high",
+    "fragile": false,
+    "incompatible_with": []
+  },
+  {
+    "id": "P020",
+    "name": "Socks Pack",
+    "category": "textile",
+    "weight": 0.3,
+    "volume": 0.8,
+    "location": [7, 6],
+    "frequency": "very_high",
+    "fragile": false,
+    "incompatible_with": []
+  }
+]
