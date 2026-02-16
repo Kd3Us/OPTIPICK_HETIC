@@ -1,25 +1,33 @@
 """
-Point d'entrée principal du système OptiPick - VERSION FINALE.
+Point d'entrée principal du système OptiPick - VERSION LEAD ONLY.
+
+Ce fichier fonctionne uniquement avec les modules du Lead.
+Les collaborateurs devront implémenter leurs parties.
 """
 
 from src.loader import load_all_data
 from src.models import Robot, Human, Cart
-from src.allocation import GreedyAllocation, print_allocation_summary
-from src.routing import RouteOptimizer, print_route_summary
-from src.optimization import OptimalAllocator, OrderBatcher
-from src.storage import StorageOptimizer, print_storage_analysis
-from src.visualization import generate_all_visualizations
+
+# TODO Collaborateur 1: Importer constraints et allocation
+# from src.constraints import ConstraintChecker
+# from src.allocation import GreedyAllocation, print_allocation_summary
+
+# TODO Collaborateur 2: Importer visualization
+# from src.visualization import generate_all_visualizations
 
 
 def main():
     """Fonction principale."""
     print("=" * 70)
     print(" " * 15 + "OPTIPICK - Système de Gestion d'Entrepôt")
-    print(" " * 25 + "VERSION FINALE - JOUR 5")
+    print(" " * 20 + "VERSION LEAD - JOUR 1 SEULEMENT")
     print("=" * 70)
     print()
     
-    # Chargement des données
+    # ========================================================================
+    # CHARGEMENT DES DONNÉES (Lead - Jour 1)
+    # ========================================================================
+    
     print("📂 Chargement des données...")
     try:
         data = load_all_data('data')
@@ -33,262 +41,202 @@ def main():
     agents = data['agents']
     orders = data['orders']
     
-    # Statistiques
+    # ========================================================================
+    # AFFICHAGE DES STATISTIQUES (Lead - Jour 1)
+    # ========================================================================
+    
     print("-" * 70)
     print("📊 STATISTIQUES")
     print("-" * 70)
-    print(f"Entrepôt : {warehouse.width}×{warehouse.height} cases, {len(warehouse.zones)} zones")
+    print(f"Entrepôt : {warehouse.width}×{warehouse.height} cases")
+    print(f"Zones : {len(warehouse.zones)}")
     print(f"Produits : {len(products)}")
-    print(f"Agents : {len(agents)} "
-          f"(R:{sum(1 for a in agents if isinstance(a, Robot))}, "
-          f"H:{sum(1 for a in agents if isinstance(a, Human))}, "
-          f"C:{sum(1 for a in agents if isinstance(a, Cart))})")
+    print(f"Agents : {len(agents)}")
+    print(f"  - Robots : {sum(1 for a in agents if isinstance(a, Robot))}")
+    print(f"  - Humains : {sum(1 for a in agents if isinstance(a, Human))}")
+    print(f"  - Chariots : {sum(1 for a in agents if isinstance(a, Cart))}")
     print(f"Commandes : {len(orders)}")
     print()
     
     # ========================================================================
-    # ALLOCATION GREEDY
+    # AFFICHAGE DES ZONES (Lead - Jour 1)
     # ========================================================================
     
-    print("=" * 70)
-    print("1️⃣  ALLOCATION GLOUTONNE (Baseline)")
-    print("=" * 70)
-    
-    agents_greedy = [type(a)(a.id, a.capacity_weight, a.capacity_volume, 
-                             a.speed, a.cost_per_hour, a.restrictions)
-                     for a in agents]
-    
-    greedy = GreedyAllocation(warehouse)
-    result_greedy = greedy.allocate(agents_greedy, orders)
-    print_allocation_summary(result_greedy, agents_greedy)
-    
-    optimizer_greedy = RouteOptimizer(warehouse)
-    routes_greedy = optimizer_greedy.optimize_all_routes(agents_greedy)
-    print_route_summary(routes_greedy)
+    print("-" * 70)
+    print("🗺️  ZONES DE L'ENTREPÔT")
+    print("-" * 70)
+    for zone_id, zone in warehouse.zones.items():
+        restrictions = ', '.join(zone.restrictions) if zone.restrictions else 'Aucune'
+        print(f"Zone {zone_id} ({zone.name}) - Type: {zone.type}")
+        print(f"  Emplacements: {len(zone.coords)}, Restrictions: {restrictions}")
+    print()
     
     # ========================================================================
-    # ALLOCATION OPTIMALE (CP-SAT)
+    # AFFICHAGE DES PRODUITS (Lead - Jour 1)
     # ========================================================================
     
-    print("\n" + "=" * 70)
-    print("2️⃣  ALLOCATION OPTIMALE (CP-SAT)")
-    print("=" * 70)
-    print("Résolution avec OR-Tools CP-SAT...")
-    
-    agents_optimal = [type(a)(a.id, a.capacity_weight, a.capacity_volume,
-                              a.speed, a.cost_per_hour, a.restrictions)
-                      for a in agents]
-    
-    optimal = OptimalAllocator(warehouse)
-    result_optimal = optimal.allocate(agents_optimal, orders, max_time_seconds=30)
-    
-    print(f"✅ Terminé en {result_optimal['solve_time_seconds']:.2f}s "
-          f"({result_optimal['status']})")
-    
-    print_allocation_summary(result_optimal, agents_optimal)
-    
-    optimizer_optimal = RouteOptimizer(warehouse)
-    routes_optimal = optimizer_optimal.optimize_all_routes(agents_optimal)
-    print_route_summary(routes_optimal)
+    print("-" * 70)
+    print("📦 PRODUITS (Échantillon - 5 premiers)")
+    print("-" * 70)
+    for product in products[:5]:
+        zone = warehouse.get_zone_at(product.location)
+        print(f"{product.id}: {product.name}")
+        print(f"  Catégorie: {product.category}, Poids: {product.weight}kg, "
+              f"Volume: {product.volume}dm³")
+        print(f"  Emplacement: {product.location} (Zone {zone})")
+        print(f"  Fragile: {'Oui' if product.fragile else 'Non'}, "
+              f"Fréquence: {product.frequency}")
+        if product.incompatible_with:
+            print(f"  Incompatible avec: {', '.join(product.incompatible_with[:3])}")
+        print()
     
     # ========================================================================
-    # COMPARAISON
+    # AFFICHAGE DES AGENTS (Lead - Jour 1)
     # ========================================================================
     
-    greedy_distance = sum(r['total_distance'] for r in routes_greedy)
-    greedy_cost = sum(r['total_cost_euros'] for r in routes_greedy)
-    greedy_time = sum(r['total_time_minutes'] for r in routes_greedy)
+    print("-" * 70)
+    print("🤖 AGENTS DISPONIBLES")
+    print("-" * 70)
+    for agent in agents:
+        print(f"{agent.id} ({agent.type})")
+        print(f"  Capacité: {agent.capacity_weight}kg / {agent.capacity_volume}dm³")
+        print(f"  Vitesse: {agent.speed}m/s")
+        print(f"  Coût: {agent.cost_per_hour}€/h")
+        if agent.restrictions:
+            print(f"  Restrictions: {agent.restrictions}")
+        print()
     
-    optimal_distance = sum(r['total_distance'] for r in routes_optimal)
-    optimal_cost = sum(r['total_cost_euros'] for r in routes_optimal)
-    optimal_time = sum(r['total_time_minutes'] for r in routes_optimal)
+    # ========================================================================
+    # AFFICHAGE DES COMMANDES (Lead - Jour 1)
+    # ========================================================================
     
-    print("\n" + "=" * 70)
-    print("📈 COMPARAISON FINALE")
-    print("=" * 70)
-    print(f"{'Métrique':<30} {'Greedy':<15} {'Optimal':<15} {'Amélioration':<15}")
+    print("-" * 70)
+    print("🛒 COMMANDES")
+    print("-" * 70)
+    for order in orders:
+        print(f"{order.id} - Priorité: {order.priority}")
+        print(f"  Reçue: {order.received_time}, Deadline: {order.deadline} "
+              f"({order.time_to_deadline()} min)")
+        print(f"  Items: {len(order.items)}")
+        print(f"  Poids total: {order.total_weight:.2f}kg")
+        print(f"  Volume total: {order.total_volume:.2f}dm³")
+        print(f"  Emplacements uniques: {len(order.get_unique_locations())}")
+        
+        # Afficher les produits de la commande
+        print(f"  Produits:")
+        for item in order.items:
+            if item.product:
+                print(f"    - {item.quantity}× {item.product.name} ({item.product.id})")
+        print()
+    
+    # ========================================================================
+    # CALCUL DE DISTANCES (Lead - Jour 1)
+    # ========================================================================
+    
+    print("-" * 70)
+    print("📏 CALCULS DE DISTANCES")
     print("-" * 70)
     
-    improvement_dist = ((greedy_distance - optimal_distance) / greedy_distance * 100 
-                       if greedy_distance > 0 else 0)
-    improvement_cost = ((greedy_cost - optimal_cost) / greedy_cost * 100 
-                       if greedy_cost > 0 else 0)
-    improvement_time = ((greedy_time - optimal_time) / greedy_time * 100 
-                       if greedy_time > 0 else 0)
+    # Distance de l'entrée à chaque zone
+    print("Distances de l'entrée aux zones:")
+    zone_distances = {}
+    for zone_id, zone in warehouse.zones.items():
+        if zone.coords:
+            # Prendre le premier emplacement de la zone
+            first_loc = zone.coords[0]
+            distance = warehouse.entry_point.distance_to(first_loc)
+            zone_distances[zone_id] = distance
+            print(f"  Zone {zone_id} ({zone.name}): {distance}m")
+    print()
     
-    print(f"{'Distance (m)':<30} {greedy_distance:<15.1f} {optimal_distance:<15.1f} "
-          f"{improvement_dist:+.1f}%")
-    print(f"{'Coût (€)':<30} {greedy_cost:<15.2f} {optimal_cost:<15.2f} "
-          f"{improvement_cost:+.1f}%")
-    print(f"{'Temps (min)':<30} {greedy_time:<15.1f} {optimal_time:<15.1f} "
-          f"{improvement_time:+.1f}%")
+    # Distance moyenne pour chaque commande
+    print("Estimation de distance par commande (simple):")
+    for order in orders[:5]:  # Afficher 5 premières
+        total_distance = 0
+        for location in order.get_unique_locations():
+            total_distance += warehouse.entry_point.distance_to(location)
+        
+        # Aller-retour simple
+        total_distance *= 2
+        
+        print(f"  {order.id}: ~{total_distance}m (aller-retour simple)")
+    print()
+    
+    # ========================================================================
+    # TODO: PROCHAINES ÉTAPES
+    # ========================================================================
+    
     print("=" * 70)
-    
-    # ========================================================================
-    # BATCHING
-    # ========================================================================
-    
-    print("\n" + "=" * 70)
-    print("3️⃣  ANALYSE DU REGROUPEMENT (BATCHING)")
+    print("✅ JOUR 1 TERMINÉ - Chargement et Modélisation OK")
     print("=" * 70)
-    
-    batcher = OrderBatcher(warehouse)
-    total_batching_benefit = 0
-    
-    for agent in agents_optimal:
-        if agent.assigned_orders and len(agent.assigned_orders) > 1:
-            batches = batcher.find_batchable_orders(agent.assigned_orders, agent)
-            
-            print(f"\n🤖 {agent.id} ({len(agent.assigned_orders)} commandes)")
-            print(f"   Groupes identifiés : {len(batches)}")
-            
-            for i, batch in enumerate(batches, 1):
-                if len(batch) > 1:
-                    benefit = batcher.calculate_batching_benefit(batch)
-                    total_batching_benefit += benefit
-                    print(f"   Groupe {i}: {len(batch)} commandes "
-                          f"→ Gain: {benefit:.1f}m")
-    
-    print(f"\n📊 Gain total potentiel du batching: {total_batching_benefit:.1f}m")
-    
-    # ========================================================================
-    # OPTIMISATION STOCKAGE
-    # ========================================================================
-    
-    print("\n" + "=" * 70)
-    print("4️⃣  OPTIMISATION DU STOCKAGE")
-    print("=" * 70)
-    
-    storage_optimizer = StorageOptimizer(warehouse)
-    
-    frequencies = storage_optimizer.analyze_product_frequency(orders)
-    affinities = storage_optimizer.analyze_product_affinity(orders)
-    
-    print_storage_analysis(frequencies, affinities, products)
-    
-    print("\n💡 Proposition de Réorganisation")
-    print("-" * 70)
-    
-    new_locations = storage_optimizer.propose_reorganization(products, orders)
-    improvement = storage_optimizer.calculate_improvement(products, orders, new_locations)
-    
-    print(f"Distance économisée : {improvement['distance_saved']:.1f}m "
-          f"({improvement['improvement_percent']:.1f}%)")
-    
-    # ========================================================================
-    # VISUALISATIONS
-    # ========================================================================
-    
-    print("\n" + "=" * 70)
-    print("5️⃣  GÉNÉRATION DES VISUALISATIONS")
-    print("=" * 70)
-    
-    generate_all_visualizations(
-        warehouse, products,
-        routes_greedy, routes_optimal,
-        agents_greedy, agents_optimal
-    )
-    
-    # ========================================================================
-    # SAUVEGARDE
-    # ========================================================================
-    
-    save_results(result_optimal, routes_optimal, improvement, 
-                greedy_distance, greedy_cost, greedy_time,
-                optimal_distance, optimal_cost, optimal_time)
-    
-    # ========================================================================
-    # RÉSUMÉ FINAL
-    # ========================================================================
-    
-    print("\n" + "=" * 70)
-    print("🏆 RÉSUMÉ FINAL DU PROJET OPTIPICK")
-    print("=" * 70)
-    print(f"\n✅ Allocation : {result_optimal['assigned_orders']}/{result_optimal['total_orders']} commandes")
-    print(f"✅ Optimisation distance : {improvement_dist:.1f}% de gain")
-    print(f"✅ Optimisation coût : {improvement_cost:.1f}% d'économie")
-    print(f"✅ Potentiel batching : {total_batching_benefit:.1f}m économisables")
-    print(f"✅ Réorganisation stockage : {improvement['improvement_percent']:.1f}% d'amélioration")
-    print(f"\n💰 Économies totales : {greedy_cost - optimal_cost:.2f}€ par cycle")
-    print(f"📊 Résultats sauvegardés dans results/")
-    print(f"📈 Visualisations générées")
-    
-    print("\n" + "=" * 70)
-    print("✅ PROJET TERMINÉ AVEC SUCCÈS !")
+    print()
+    print("📋 PROCHAINES ÉTAPES:")
+    print()
+    print("🔸 COLLABORATEUR 1 doit implémenter:")
+    print("   - src/constraints.py (vérification des contraintes)")
+    print("   - src/allocation.py (allocation gloutonne)")
+    print("   - tests/test_constraints.py")
+    print("   - tests/test_allocation.py")
+    print("   - tests/test_utils.py")
+    print()
+    print("🔸 COLLABORATEUR 2 doit implémenter:")
+    print("   - src/visualization.py (graphiques et cartes)")
+    print("   - tests/test_models.py")
+    print("   - notebooks/exploration.ipynb")
+    print("   - notebooks/analysis.ipynb")
+    print("   - docs/rapport.md")
+    print()
+    print("🔸 LEAD (vous) a déjà implémenté:")
+    print("   ✅ src/models.py")
+    print("   ✅ src/loader.py")
+    print("   ✅ src/routing.py")
+    print("   ✅ src/optimization.py")
+    print("   ✅ src/storage.py")
+    print("   ✅ src/utils.py")
+    print("   ✅ main.py")
+    print()
     print("=" * 70)
 
 
-def save_results(allocation_result: dict, routes: list, storage_improvement: dict,
-                greedy_distance: float, greedy_cost: float, greedy_time: float,
-                optimal_distance: float, optimal_cost: float, optimal_time: float):
-    """Sauvegarde complète des résultats."""
-    import json
-    from pathlib import Path
+def test_basic_functionality():
+    """Tests de base pour valider le chargement."""
+    print("\n" + "=" * 70)
+    print("🧪 TESTS DE BASE")
+    print("=" * 70)
     
-    results_dir = Path('results')
-    results_dir.mkdir(exist_ok=True)
+    from src.models import Location
+    from src.utils import calculate_total_distance
     
-    # Allocation
-    with open(results_dir / 'allocation_results.json', 'w', encoding='utf-8') as f:
-        json.dump(allocation_result, f, indent=2, ensure_ascii=False)
+    # Test 1: Distance de Manhattan
+    loc1 = Location(0, 0)
+    loc2 = Location(3, 4)
+    distance = loc1.distance_to(loc2)
+    assert distance == 7, f"Distance devrait être 7, obtenu {distance}"
+    print("✅ Test distance de Manhattan: OK")
     
-    # Routes
-    routes_serializable = []
-    for route in routes:
-        route_copy = route.copy()
-        route_copy['route'] = [
-            {
-                'location': {'x': step['location'].x, 'y': step['location'].y},
-                'products': [
-                    {
-                        'order_id': p['order_id'],
-                        'product_id': p['product'].id,
-                        'product_name': p['product'].name,
-                        'quantity': p['quantity']
-                    }
-                    for p in step['products']
-                ],
-                'cumulative_distance': step['cumulative_distance']
-            }
-            for step in route_copy['route']
-        ]
-        routes_serializable.append(route_copy)
+    # Test 2: Calcul de distance totale
+    locations = [Location(0, 0), Location(3, 0), Location(3, 4)]
+    total = calculate_total_distance(locations)
+    print(f"✅ Test distance totale: {total}m")
     
-    with open(results_dir / 'routes.json', 'w', encoding='utf-8') as f:
-        json.dump(routes_serializable, f, indent=2, ensure_ascii=False)
+    # Test 3: Chargement des données
+    try:
+        data = load_all_data('data')
+        assert len(data['products']) > 0, "Aucun produit chargé"
+        assert len(data['agents']) > 0, "Aucun agent chargé"
+        assert len(data['orders']) > 0, "Aucune commande chargée"
+        print("✅ Test chargement données: OK")
+    except Exception as e:
+        print(f"❌ Test chargement données: ÉCHEC - {e}")
     
-    # Métriques complètes
-    metrics = {
-        'allocation': {
-            'status': allocation_result['status'],
-            'total_orders': allocation_result['total_orders'],
-            'assigned_orders': allocation_result['assigned_orders'],
-            'success_rate': 100.0,
-            'solve_time_seconds': allocation_result['solve_time_seconds']
-        },
-        'comparison': {
-            'greedy': {
-                'distance_m': greedy_distance,
-                'cost_euros': greedy_cost,
-                'time_minutes': greedy_time
-            },
-            'optimal': {
-                'distance_m': optimal_distance,
-                'cost_euros': optimal_cost,
-                'time_minutes': optimal_time
-            },
-            'improvements': {
-                'distance_percent': (greedy_distance - optimal_distance) / greedy_distance * 100,
-                'cost_percent': (greedy_cost - optimal_cost) / greedy_cost * 100,
-                'time_percent': (greedy_time - optimal_time) / greedy_time * 100
-            }
-        },
-        'storage_optimization': storage_improvement
-    }
-    
-    with open(results_dir / 'metrics.json', 'w', encoding='utf-8') as f:
-        json.dump(metrics, f, indent=2, ensure_ascii=False)
+    print("=" * 70)
 
 
 if __name__ == "__main__":
     main()
+    
+    # Tests optionnels
+    print("\n")
+    response = input("Voulez-vous exécuter les tests de base ? (o/n): ")
+    if response.lower() == 'o':
+        test_basic_functionality()
