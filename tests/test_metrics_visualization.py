@@ -48,3 +48,29 @@ products = [
 visualization.plot_warehouse(warehouse, products)
 visualization.plot_agent_utilization(utilization)
 
+# --- Comparaison distances ---
+scenarios_distance = {
+    "Glouton": 120,
+    "TSP": 95,
+    "CP-SAT": 80,
+    "Batching": 90
+}
+visualization.plot_distance_comparison(scenarios_distance)
+
+# --- Breakdown coûts ---
+agents_costs = {
+    "robot_1": 200,
+    "humain_1": 150,
+    "chariot_1": 100
+}
+visualization.plot_cost_breakdown(agents_costs)
+
+# --- Comparaison temps ---
+scenarios_time = {
+    "Glouton": 45,
+    "TSP": 38,
+    "CP-SAT": 30,
+    "Batching": 35
+}
+visualization.plot_time_comparison(scenarios_time)
+
