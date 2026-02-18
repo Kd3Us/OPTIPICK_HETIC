@@ -1,82 +1,134 @@
-"""
-OptiPick entry point.
-
-Currently covers Day 1 scope only: data loading and display.
-
-Pending collaborator work:
-    Collaborator 1 -- src/constraints.py, src/allocation.py
-    Collaborator 2 -- src/visualization.py
-
-Integrate their modules once delivered by updating the imports
-and the TODO sections below.
-"""
+from pathlib import Path
 
 from src.loader import load_all_data
 from src.models import Robot, Human, Cart
+from src.allocation import GreedyAllocation, print_allocation_summary
+from src.optimization import OptimalAllocator
+from src.routing import RouteOptimizer, print_route_summary
+from src.storage import StorageOptimizer
+from src.metrics import (
+    build_metrics_from_route_results, export_allocation_results,
+    export_routes, export_metrics, print_metrics_summary
+)
+from src.visualization import (
+    create_dashboard, plot_agent_utilization, plot_distance_comparison,
+    plot_cost_breakdown, plot_zone_traffic, plot_product_frequency
+)
 
-# TODO (after Collaborator 1): uncomment and wire in
-# from src.constraints import ConstraintChecker
-# from src.allocation import GreedyAllocation, print_allocation_summary
-
-# TODO (after Collaborator 2): uncomment and wire in
-# from src.visualization import generate_all_visualizations
+Path("results").mkdir(exist_ok=True)
 
 
 def main():
-    print("=" * 60)
-    print("OptiPick - Warehouse Management Optimisation")
-    print("Day 1 - Data loading")
-    print("=" * 60)
+    print("OptiPick - Optimisation de Tournees d'Entrepot\n")
 
-    print("\nLoading data...")
-    try:
-        data = load_all_data('data')
-    except Exception as exc:
-        print(f"Failed to load data: {exc}")
-        return
-
+    # chargement
+    data = load_all_data('data')
     warehouse = data['warehouse']
-    products = data['products']
-    agents = data['agents']
-    orders = data['orders']
+    products  = data['products']
+    agents    = data['agents']
+    orders    = data['orders']
 
-    print(f"  Warehouse : {warehouse.width}x{warehouse.height}")
-    print(f"  Zones     : {len(warehouse.zones)}")
-    print(f"  Products  : {len(products)}")
-    print(f"  Agents    : {len(agents)}"
-          f"  (robots: {sum(1 for a in agents if isinstance(a, Robot))},"
-          f"  humans: {sum(1 for a in agents if isinstance(a, Human))},"
-          f"  carts: {sum(1 for a in agents if isinstance(a, Cart))})")
-    print(f"  Orders    : {len(orders)}")
+    robots = [a for a in agents if isinstance(a, Robot)]
+    humans = [a for a in agents if isinstance(a, Human)]
+    carts  = [a for a in agents if isinstance(a, Cart)]
 
-    print("\nZones:")
-    for zone_id, zone in warehouse.zones.items():
-        restr = ', '.join(zone.restrictions) if zone.restrictions else 'none'
-        print(f"  {zone_id} ({zone.name})  slots={len(zone.coords)}  restrictions={restr}")
+    print(f"Entrepot {warehouse.width}x{warehouse.height} | "
+          f"{len(products)} produits | "
+          f"{len(robots)} robots, {len(humans)} humains, {len(carts)} chariots | "
+          f"{len(orders)} commandes\n")
 
-    print("\nOrders:")
-    for order in orders:
-        print(
-            f"  {order.id}  priority={order.priority}"
-            f"  deadline={order.deadline}"
-            f"  {order.time_to_deadline()}min"
-            f"  {order.total_weight:.1f}kg / {order.total_volume:.1f}dm3"
-            f"  ({len(order.items)} items)"
+    # allocation gloutonne (baseline)
+    print("--- Allocation gloutonne ---")
+    greedy_result = GreedyAllocation(warehouse).allocate(agents, orders)
+    print_allocation_summary(greedy_result, agents)
+
+    greedy_total_dist = sum(
+        warehouse.entry_point.distance_to(loc) * 2
+        for a in agents
+        for o in a.assigned_orders
+        for loc in o.get_unique_locations()
+    )
+    export_allocation_results(greedy_result, "results/allocation_greedy.json")
+
+    # allocation optimale CP-SAT
+    print("\n--- Allocation CP-SAT ---")
+    optimal_result = OptimalAllocator(warehouse).allocate(agents, orders, max_time_seconds=30)
+    print(f"Statut: {optimal_result['status']} | "
+          f"{optimal_result['assigned_orders']}/{optimal_result['total_orders']} commandes | "
+          f"{optimal_result['solve_time_seconds']:.1f}s")
+    export_allocation_results(optimal_result, "results/allocation_optimal.json")
+
+    # optimisation des tournees TSP
+    print("\n--- Tournees TSP ---")
+    route_results = RouteOptimizer(warehouse).optimize_all_routes(agents)
+    print_route_summary(route_results)
+    optimal_total_dist = sum(r['total_distance'] for r in route_results)
+    export_routes(route_results, "results/routes.json")
+
+    # analyse du stockage
+    print("\n--- Analyse du stockage ---")
+    storage = StorageOptimizer(warehouse)
+    frequencies  = storage.analyze_product_frequency(orders)
+    zone_traffic = storage.analyze_zone_traffic(orders)
+    new_locations = storage.propose_reorganization(products, orders)
+    improvement  = storage.calculate_improvement(products, orders, new_locations)
+
+    print(f"Distance avg actuelle  : {improvement['current_avg_distance']:.1f}m")
+    print(f"Distance avg optimisee : {improvement['new_avg_distance']:.1f}m")
+    print(f"Gain estime            : {improvement['improvement_percent']:.1f}%")
+
+    # metriques
+    print("\n--- Metriques ---")
+    metrics = build_metrics_from_route_results(route_results)
+    print_metrics_summary(metrics)
+    export_metrics(metrics, "results/metrics.json")
+
+    # visualisations
+    print("\n--- Visualisations ---")
+    wh_dict = {"width": warehouse.width, "height": warehouse.height}
+
+    if metrics.get('per_agent'):
+        total_t = metrics.get('makespan_minutes', 1) or 1
+        util = {a: round(info['time_minutes'] / total_t * 100, 1)
+                for a, info in metrics['per_agent'].items()}
+        plot_agent_utilization(util, "results/agent_utilization.png")
+
+    plot_distance_comparison(
+        {"Glouton": round(greedy_total_dist, 1), "TSP+CP-SAT": round(optimal_total_dist, 1)},
+        "results/distance_comparison.png"
+    )
+
+    if metrics.get('per_agent'):
+        plot_cost_breakdown(
+            {a: round(info['cost_euros'], 2) for a, info in metrics['per_agent'].items()},
+            "results/cost_breakdown.png"
         )
 
-    print("\nDistance from entry per zone:")
-    for zone_id, zone in warehouse.zones.items():
-        if zone.coords:
-            dist = warehouse.entry_point.distance_to(zone.coords[0])
-            print(f"  Zone {zone_id} ({zone.name}): {dist}m")
+    if zone_traffic:
+        plot_zone_traffic(zone_traffic, "results/zone_traffic.png")
 
-    # TODO (after Collaborator 1): replace the block below with allocation + summary
-    # allocator = GreedyAllocation(warehouse)
-    # result = allocator.allocate(agents, orders)
-    # print_allocation_summary(result, agents)
+    products_dict = {p.id: p for p in products}
+    freq_names = {products_dict[pid].name: count for pid, count in frequencies.items()
+                  if pid in products_dict}
+    plot_product_frequency(freq_names, top_n=10, save_path="results/product_frequency.png")
 
-    # TODO (after Collaborator 2): generate visualisations
-    # generate_all_visualizations(warehouse, agents, orders, result, routes)
+    create_dashboard(
+        allocation=optimal_result,
+        route_results=route_results,
+        metrics=metrics,
+        warehouse=wh_dict,
+        save_path="results/dashboard.png"
+    )
+    print("Graphiques exportes dans results/")
+
+    # resume
+    print(f"\n{'='*50}")
+    print(f"Commandes traitees : {optimal_result['assigned_orders']}/{optimal_result['total_orders']}")
+    print(f"Distance totale    : {metrics.get('total_distance_m', 0):.1f} m")
+    print(f"Cout total         : {metrics.get('total_cost_euros', 0):.2f} EUR")
+    print(f"Makespan           : {metrics.get('makespan_minutes', 0):.1f} min")
+    print(f"Gain stockage      : {improvement['improvement_percent']:.1f}%")
+    print(f"{'='*50}")
 
 
 if __name__ == "__main__":

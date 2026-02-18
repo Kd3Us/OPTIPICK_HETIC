@@ -1,111 +1,76 @@
-from datetime import datetime, timedelta
 from typing import List, Tuple
+from .models import Agent, Robot, Human, Cart, Product, Order, Warehouse
 
-# 1. Capacité
-def check_capacity(agent, products: list) -> Tuple[bool, str]:
-    total_weight = sum(product["weight"] for product in products)
-    total_volume = sum(product["volume"] for product in products)
 
-    if total_weight > agent["capacity_weight"]:
-        return False, "capacité de poids dépassée"
-    if total_volume > agent["capacity_volume"]:
-        return False, "capacité de volume dépassée"
-    return True, ""
+class ConstraintChecker:
 
-# 2. Incompatibilités (avec correction de la casse)
-def check_incompatibilities(products: list) -> Tuple[bool, str]:
-    for i in range(len(products)):
-        for j in range(i + 1, len(products)):
-            p_a = products[i]
-            p_b = products[j]
+    def __init__(self, warehouse: Warehouse):
+        self.warehouse = warehouse
 
-            id_a = str(p_a["id"]).upper()
-            id_b = str(p_b["id"]).upper()
-            incomp_a = [str(x).upper() for x in p_a.get("incompatible_with", [])]
-            incomp_b = [str(x).upper() for x in p_b.get("incompatible_with", [])]
+    def check_capacity(self, agent: Agent, order: Order) -> Tuple[bool, str]:
+        new_weight = agent.current_load_weight + order.total_weight
+        new_volume = agent.current_load_volume + order.total_volume
+        if new_weight > agent.capacity_weight:
+            return False, f"Weight capacity exceeded: {new_weight:.1f}kg > {agent.capacity_weight}kg"
+        if new_volume > agent.capacity_volume:
+            return False, f"Volume capacity exceeded: {new_volume:.1f}dm3 > {agent.capacity_volume}dm3"
+        return True, ''
 
-            if id_a in incomp_b or id_b in incomp_a:
-                return False, f"Produit {id_a} incompatible avec {id_b}"
-    return True, ""
+    def check_product_compatibility(self, products: List[Product]) -> Tuple[bool, str]:
+        for i, p1 in enumerate(products):
+            for p2 in products[i + 1:]:
+                if not p1.is_compatible_with(p2):
+                    return False, f"Products incompatible: {p1.id} and {p2.id}"
+        return True, ''
 
-# 3. Restrictions Robot
-def check_rebot_restructions(robot, product_list: list, warehouse_data) -> Tuple[bool, str]:
-    forbidden_coords = warehouse_data["zones"]["C"]["coords"]
-    restrictions = robot.get("restrictions", {})
-    no_zones = restrictions.get("no_zones", [])
-    no_fragile = restrictions.get("no_fragile", False)
-    max_item_weight = restrictions.get("max_item_weight", None)
+    def check_robot_restrictions(self, robot: Robot, order: Order) -> Tuple[bool, str]:
+        no_zones = robot.restrictions.get('no_zones', [])
+        no_fragile = robot.restrictions.get('no_fragile', False)
+        max_item_weight = robot.restrictions.get('max_item_weight', float('inf'))
 
-    for p in product_list:
-        if p["location"] in forbidden_coords:
-            return False, f"Robot {robot['id']} interdit en Zone C"
-        if p.get("zone") in no_zones:
-            return False, f"Zone {p['zone']} interdite pour {robot['id']}"
-        if no_fragile and p.get("fragile", False):
-            return False, f"Robot {robot['id']} ne peut pas transporter de produit fragile {p['id']}"
-        if max_item_weight is not None and p.get("weight", 0) > max_item_weight:
-            return False, f"Produit {p['id']} dépasse le poids max autorisé"
-    return True, ""
+        for item in order.items:
+            if not item.product:
+                continue
+            product = item.product
+            zone_id = self.warehouse.get_zone_at(product.location)
+            if zone_id and zone_id in no_zones:
+                return False, f"Robot {robot.id} cannot enter zone {zone_id} (product {product.id})"
+            if no_fragile and product.fragile:
+                return False, f"Robot {robot.id} cannot carry fragile product {product.id}"
+            if product.weight > max_item_weight:
+                return False, f"Item {product.id} too heavy for robot {robot.id}"
+        return True, ''
 
-# 4. Assignation Chariot
-def check_cart_assigment(cart, human):
-    restrictions = cart.get('restrictions', {})
-    requires_human = restrictions.get('requires_human', True)
-    if requires_human and human is None:
-        return False, f"{cart['id']} nécessite un humain"
-    return True, ""
+    def check_cart_assignment(self, cart: Cart) -> Tuple[bool, str]:
+        if cart.restrictions.get('requires_human', False) and cart.assigned_human is None:
+            return False, f"Cart {cart.id} requires an assigned human"
+        return True, ''
 
-# 5. Calculs de distance et temps
-def calculate_dist(pos1, pos2):
-    return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    def can_assign_order(self, agent: Agent, order: Order) -> Tuple[bool, List[str]]:
+        errors = []
 
-def get_total_path_distance(order, products_dict, warehouse_data):
-    entry = warehouse_data["entry_point"]
-    total_dist = 0
-    current_pos = entry
-    for item in order["items"]:
-        product_pos = products_dict[item["product_id"]]["location"]
-        total_dist += calculate_dist(current_pos, product_pos)
-        current_pos = product_pos
-    total_dist += calculate_dist(current_pos, entry)
-    return total_dist
+        ok, msg = self.check_capacity(agent, order)
+        if not ok:
+            errors.append(msg)
 
-def get_final_delivery_time(agent, order, products_dict, warehouse_data):
-    distance = get_total_path_distance(order, products_dict, warehouse_data)
-    travel_time = distance / agent["speed"]
-    picking_time = sum(item["quantity"] for item in order["items"]) * 30
-    duration_minutes = (travel_time + picking_time) / 60
-    
-    start_time = datetime.strptime(order["received_time"], "%H:%M")
-    end_time = start_time + timedelta(minutes=duration_minutes)
-    return end_time.strftime("%H:%M")
+        products = [item.product for item in order.items if item.product]
+        ok, msg = self.check_product_compatibility(products)
+        if not ok:
+            errors.append(msg)
 
-# 6. Validation Globale
-def validate_allocation(agent, order, products, warehouse_data, human=None) -> Tuple[bool, List[str]]:
-    errors = []
-    
-    # On crée un dictionnaire local pour les fonctions de calcul
-    products_dict = {p["id"]: p for p in products}
+        # check against what's already on the agent
+        ok, msg = self.check_product_compatibility(agent.current_products + products)
+        if not ok:
+            errors.append(f"Incompatible with agent's current load: {msg}")
 
-    # Capacité
-    is_cap_ok, cap_msg = check_capacity(agent, products)
-    if not is_cap_ok: errors.append(cap_msg)
+        if isinstance(agent, Robot):
+            ok, msg = self.check_robot_restrictions(agent, order)
+            if not ok:
+                errors.append(msg)
 
-    # Incompatibilités
-    is_inc_ok, inc_msg = check_incompatibilities(products)
-    if not is_inc_ok: errors.append(inc_msg)
+        if isinstance(agent, Cart):
+            ok, msg = self.check_cart_assignment(agent)
+            if not ok:
+                errors.append(msg)
 
-    # Restrictions par type
-    if agent.get("type") == "robot":
-        is_rob_ok, rob_msg = check_rebot_restructions(agent, products, warehouse_data)
-        if not is_rob_ok: errors.append(rob_msg)
-    elif agent.get("type") == "cart":
-        is_cart_ok, cart_msg = check_cart_assigment(agent, human)
-        if not is_cart_ok: errors.append(cart_msg)
-
-    # Deadline
-    final_time_str = get_final_delivery_time(agent, order, products_dict, warehouse_data)
-    if final_time_str > order["deadline"]:
-        errors.append(f"Deadline dépassée : {final_time_str} > {order['deadline']}")
-
-    return len(errors) == 0, errors
+        return len(errors) == 0, errors
