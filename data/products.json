@@ -6,6 +6,7 @@
     "weight": 2.5,
     "volume": 8.0,
     "location": [1, 1],
+    "pick_point": [1, 2],
     "frequency": "high",
     "fragile": true,
     "incompatible_with": ["P015", "P016"]
@@ -17,6 +18,7 @@
     "weight": 0.1,
     "volume": 0.5,
     "location": [2, 1],
+    "pick_point": [2, 2],
     "frequency": "very_high",
     "fragile": false,
     "incompatible_with": []
@@ -28,6 +30,7 @@
     "weight": 0.3,
     "volume": 1.0,
     "location": [3, 1],
+    "pick_point": [3, 2],
     "frequency": "high",
     "fragile": false,
     "incompatible_with": []
@@ -39,6 +42,7 @@
     "weight": 1.2,
     "volume": 3.5,
     "location": [4, 1],
+    "pick_point": [4, 2],
     "frequency": "medium",
     "fragile": false,
     "incompatible_with": []
@@ -50,6 +54,7 @@
     "weight": 5.5,
     "volume": 15.0,
     "location": [1, 3],
+    "pick_point": [1, 2],
     "frequency": "medium",
     "fragile": true,
     "incompatible_with": ["P015", "P016"]
@@ -61,6 +66,7 @@
     "weight": 0.8,
     "volume": 2.0,
     "location": [5, 0],
+    "pick_point": [5, 2],
     "frequency": "high",
     "fragile": false,
     "incompatible_with": []
@@ -72,6 +78,7 @@
     "weight": 1.0,
     "volume": 2.5,
     "location": [6, 0],
+    "pick_point": [6, 2],
     "frequency": "medium",
     "fragile": false,
     "incompatible_with": []
@@ -83,6 +90,7 @@
     "weight": 0.7,
     "volume": 1.8,
     "location": [7, 0],
+    "pick_point": [7, 2],
     "frequency": "high",
     "fragile": false,
     "incompatible_with": []
@@ -94,6 +102,7 @@
     "weight": 0.5,
     "volume": 2.5,
     "location": [2, 3],
+    "pick_point": [2, 2],
     "frequency": "high",
     "fragile": true,
     "incompatible_with": []
@@ -105,6 +114,7 @@
     "weight": 0.4,
     "volume": 1.5,
     "location": [3, 3],
+    "pick_point": [3, 2],
     "frequency": "medium",
     "fragile": false,
     "incompatible_with": []
@@ -116,6 +126,7 @@
     "weight": 0.5,
     "volume": 1.0,
     "location": [8, 0],
+    "pick_point": [8, 2],
     "frequency": "high",
     "fragile": false,
     "incompatible_with": ["P015", "P016", "P017"]
@@ -127,6 +138,7 @@
     "weight": 1.0,
     "volume": 1.5,
     "location": [9, 0],
+    "pick_point": [9, 2],
     "frequency": "high",
     "fragile": true,
     "incompatible_with": ["P015", "P016", "P017"]
@@ -138,6 +150,7 @@
     "weight": 1.2,
     "volume": 2.0,
     "location": [8, 1],
+    "pick_point": [8, 2],
     "frequency": "very_high",
     "fragile": false,
     "incompatible_with": ["P015", "P016", "P017"]
@@ -149,6 +162,7 @@
     "weight": 0.3,
     "volume": 0.5,
     "location": [9, 1],
+    "pick_point": [9, 2],
     "frequency": "medium",
     "fragile": false,
     "incompatible_with": ["P015", "P016", "P017"]
@@ -160,6 +174,7 @@
     "weight": 1.5,
     "volume": 3.0,
     "location": [1, 6],
+    "pick_point": [1, 5],
     "frequency": "medium",
     "fragile": false,
     "incompatible_with": ["P001", "P005", "P009", "P011", "P012", "P013", "P014"]
@@ -171,6 +186,7 @@
     "weight": 2.0,
     "volume": 3.5,
     "location": [2, 6],
+    "pick_point": [2, 5],
     "frequency": "low",
     "fragile": true,
     "incompatible_with": ["P001", "P005", "P009", "P011", "P012", "P013", "P014"]
@@ -182,6 +198,7 @@
     "weight": 0.8,
     "volume": 1.5,
     "location": [3, 6],
+    "pick_point": [3, 5],
     "frequency": "medium",
     "fragile": false,
     "incompatible_with": ["P011", "P012", "P013", "P014"]
@@ -193,6 +210,7 @@
     "weight": 0.2,
     "volume": 1.0,
     "location": [5, 6],
+    "pick_point": [5, 5],
     "frequency": "high",
     "fragile": false,
     "incompatible_with": []
@@ -204,6 +222,7 @@
     "weight": 0.6,
     "volume": 2.0,
     "location": [6, 6],
+    "pick_point": [6, 5],
     "frequency": "high",
     "fragile": false,
     "incompatible_with": []
@@ -215,6 +234,7 @@
     "weight": 0.3,
     "volume": 0.8,
     "location": [7, 6],
+    "pick_point": [7, 5],
     "frequency": "very_high",
     "fragile": false,
     "incompatible_with": []

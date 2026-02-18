@@ -42,6 +42,7 @@ class Product:
     weight: float
     volume: float
     location: Location
+    pick_point: Location          # aisle cell where agent stands to pick this product
     frequency: str
     fragile: bool
     incompatible_with: List[str] = field(default_factory=list)
@@ -166,11 +167,20 @@ class Order:
         return [(item.product, item.quantity) for item in self.items if item.product]
 
     def get_unique_locations(self) -> List[Location]:
+        """Returns the physical rack locations of all products in this order."""
         locations = set()
         for item in self.items:
             if item.product:
                 locations.add(item.product.location)
         return list(locations)
+
+    def get_unique_pick_points(self) -> List[Location]:
+        """Returns the aisle pick points where agents actually stand to collect products."""
+        pick_points = set()
+        for item in self.items:
+            if item.product:
+                pick_points.add(item.product.pick_point)
+        return list(pick_points)
 
     def has_incompatibilities(self) -> bool:
         products = [item.product for item in self.items if item.product]
@@ -207,6 +217,7 @@ class Warehouse:
     height: int
     entry_point: Location
     zones: Dict[str, Zone] = field(default_factory=dict)
+    aisles: List[Location] = field(default_factory=list)
 
     def get_zone_at(self, location: Location) -> Optional[str]:
         for zone_id, zone in self.zones.items():
@@ -219,6 +230,9 @@ class Warehouse:
         if zone_id:
             return self.zones[zone_id].type
         return None
+
+    def is_aisle(self, location: Location) -> bool:
+        return location in self.aisles
 
     def __repr__(self):
         return f"Warehouse({self.width}x{self.height}, {len(self.zones)} zones)"

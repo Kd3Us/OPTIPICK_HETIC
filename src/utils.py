@@ -20,7 +20,11 @@ def calculate_agent_cost(agent: Agent, time_minutes: float) -> float:
 
 
 def estimate_order_distance(order: Order, entry_point: Location) -> float:
-    return calculate_total_distance(order.get_unique_locations(), entry_point)
+    """
+    Estimate the travel distance for an order using pick_points (aisle cells).
+    Agents never navigate through rack cells.
+    """
+    return calculate_total_distance(order.get_unique_pick_points(), entry_point)
 
 
 def calculate_travel_time(distance: float, speed: float) -> float:

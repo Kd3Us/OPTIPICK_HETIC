@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Tests for constraint checking logic."""
 
 import sys
@@ -55,6 +54,15 @@ class TestCapacity:
         assert ok is False
         assert "volume" in msg.lower()
 
+    def test_exactly_at_capacity(self, checker):
+        agent = Robot("R1", 20, 30, 2.0, 5, {})
+        product = Product("P001", "Exact", "cat", 10.0, 15.0, Location(1, 1), "high", False, [])
+        order = Order("O001", "08:00", "10:00", "standard",
+                      items=[OrderItem("P001", 2, product)])
+        order.calculate_totals()
+        ok, msg = checker.check_capacity(agent, order)
+        assert ok is True
+
 
 class TestProductCompatibility:
 
@@ -70,6 +78,17 @@ class TestProductCompatibility:
         ok, msg = checker.check_product_compatibility([p1, p2])
         assert ok is False
         assert "incompatible" in msg.lower()
+
+    def test_single_product_always_compatible(self, checker):
+        p1 = Product("P001", "A", "chemical", 1.0, 1.0, Location(0, 0), "high", False, ["P002"])
+        ok, _ = checker.check_product_compatibility([p1])
+        assert ok is True
+
+    def test_incompatible_bidirectional(self, checker):
+        p1 = Product("P001", "A", "cat", 1.0, 1.0, Location(0, 0), "high", False, [])
+        p2 = Product("P002", "B", "cat", 1.0, 1.0, Location(1, 1), "high", False, ["P001"])
+        ok, msg = checker.check_product_compatibility([p1, p2])
+        assert ok is False
 
 
 class TestRobotRestrictions:
@@ -100,6 +119,14 @@ class TestRobotRestrictions:
         ok, msg = checker.check_robot_restrictions(robot, order)
         assert ok is False
         assert "heavy" in msg.lower()
+
+    def test_allowed_zone_accepted(self, checker):
+        robot = Robot("R1", 20, 30, 2.0, 5, {'no_zones': ['C']})
+        product = Product("P001", "Cable", "electronics", 0.1, 0.5, Location(1, 1), "high", False, [])
+        order = Order("O001", "08:00", "10:00", "standard",
+                      items=[OrderItem("P001", 1, product)])
+        ok, _ = checker.check_robot_restrictions(robot, order)
+        assert ok is True
 
 
 class TestCartAssignment:
@@ -142,58 +169,3 @@ class TestCanAssignOrder:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-=======
-import pytest 
-from src.constraints import (
-    check_capacity,
-    check_incompatibilities,
-    calculate_dist,
-    get_total_path_distance
-)
-
-# --- TEST 1 : LA CAPACITÉ ---
-def test_capacity_ok(): # Corrigé 'text' en 'test'
-    agent = {"capacity_weight": 50, "capacity_volume": 100}
-    products = [
-        {"weight": 10, "volume": 20},
-        {"weight": 5, "volume": 10}
-    ]
-    valide, msg = check_capacity(agent, products)
-    assert valide is True
-
-def test_capacity_trop_lourd():
-    agent = {"capacity_weight": 10, "capacity_volume": 100}
-    products = [{"weight": 15, "volume": 5}] # 15kg > 10kg
-    valide, msg = check_capacity(agent, products)
-    assert valide is False
-    # Vérifie que ton code dans constraints.py écrit bien "poids" avec un S
-    assert "poids" in msg.lower()
-
-# --- TEST 2 : INCOMPATIBILITÉS ---
-def test_incompatbilities_detectees():
-    products = [
-        {"id": "p11", "incompatible_with": ["p15"]},
-        {"id": "P15", "incompatible_with": ["P11"]}
-    ]
-    valide, msg = check_incompatibilities(products)
-    assert valide is False
-    assert "incompatible" in msg.lower() # Ajout de .lower() par sécurité
-
-# --- TEST 3 : LA DISTANCE DE MANHATTAN ---
-def test_calcul_distance_simple():
-    # Distance entre [0,0] et [3,4] : |0-3| + |0-4| = 7
-    assert calculate_dist([0, 0], [3, 4]) == 7
-
-def test_distance_totale_parcours():
-    # Simulation d'une commande
-    order = {"items": [{"product_id": "P1"}]}
-    # Simulation du dictionnaire de produits
-    products_dict = {"P1": {"location": [2, 3]}}
-    # Simulation du warehouse
-    warehouse = {"entry_point": [0, 0]}
-    
-    # Parcours : [0,0] -> [2,3] -> [0,0]
-    # Distances : (2+3) + (2+3) = 10
-    total = get_total_path_distance(order, products_dict, warehouse)
-    assert total == 10
->>>>>>> emery

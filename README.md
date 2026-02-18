@@ -1,12 +1,15 @@
-# 🚀 OptiPick - Optimisation de Tournées d'Entrepôt
+# 🚀 OptiPick — Optimisation de Tournées d'Entrepôt
 
-Projet de Programmation Logique et par Contraintes - L2 Informatique
+Projet de Programmation Logique et par Contraintes — L2 Informatique · HETIC 2025
 
 ## 📋 Description
 
-Système d'optimisation pour la préparation de commandes en entrepôt avec coopération humain-robot.
+Système d'optimisation pour la préparation de commandes en entrepôt avec coopération humain-robot. Le système modélise un entrepôt 10×8 avec 5 zones, 7 agents (3 robots, 2 humains, 2 chariots) et 12 commandes journalières.
+
+L'allocation optimale est résolue via **OR-Tools CP-SAT** (programmation par contraintes), et les tournées sont optimisées via **OR-Tools Routing** (TSP).
 
 ## 🛠️ Installation
+
 ```bash
 # Cloner le repository
 git clone [URL_DU_REPO]
@@ -21,24 +24,75 @@ pip install -r requirements.txt
 ```
 
 ## 🚀 Utilisation
+
 ```bash
 python main.py
 ```
 
+Les résultats sont exportés dans le dossier `results/` :
+- `allocation_greedy.json` — allocation gloutonne (baseline)
+- `allocation_optimal.json` — allocation CP-SAT
+- `routes.json` — tournées optimisées
+- `metrics.json` — métriques de performance
+- `dashboard.png` — dashboard de visualisation
+
+## 🧪 Tests
+
+```bash
+pytest tests/ -v
+```
+
 ## 👥 Équipe
 
-- Lead : [Votre Nom]
-- Collaborateur 1 : [Nom]
-- Collaborateur 2 : [Nom]
+- **Lead technique** : Jules
+- **Contraintes & Tests** : [Prénom Collaborateur 1]
+- **Visualisation & Métriques** : [Prénom Collaborateur 2]
 
 ## 📅 Planning
 
-- Jour 1 : Architecture & Core
-- Jour 2 : Contraintes & Validation
-- Jour 3 : Optimisation TSP
-- Jour 4 : Optimisation Globale
-- Jour 5 : Finalisation & Soutenance
+- Jour 1 : Architecture & modélisation des données
+- Jour 2 : Contraintes dures & validation
+- Jour 3 : Optimisation TSP des tournées
+- Jour 4 : Allocation optimale CP-SAT
+- Jour 5 : Stockage, visualisation & soutenance
 
-## 📊 Métriques
+## 📊 Résultats
 
-À compléter au fur et à mesure du projet.
+| Métrique | Glouton | CP-SAT + TSP |
+|---|---|---|
+| Distance totale | 302m | 60m |
+| Réduction distance | — | **-80%** |
+| Coût total | 2,80€ | 0,62€ |
+| Réduction coût | — | **-78%** |
+| Commandes traitées | 12/12 | 12/12 |
+| Violations contraintes | 0 | 0 |
+| Temps de résolution | — | 0,025s |
+
+## 🏗️ Architecture
+
+```
+optipick/
+├── data/               # Fichiers JSON de configuration
+├── src/
+│   ├── models.py       # Classes Warehouse, Product, Agent, Order
+│   ├── loader.py       # Chargement des données JSON
+│   ├── constraints.py  # Vérification des contraintes (C1-C4)
+│   ├── allocation.py   # Allocation gloutonne (baseline)
+│   ├── optimization.py # Allocation optimale CP-SAT
+│   ├── routing.py      # Optimisation des tournées TSP
+│   ├── storage.py      # Analyse et optimisation du stockage
+│   ├── visualization.py# Graphiques et dashboard
+│   ├── metrics.py      # Calcul des métriques de performance
+│   └── utils.py        # Fonctions utilitaires
+├── tests/              # Tests unitaires pytest (30+ tests)
+├── results/            # Résultats générés automatiquement
+├── main.py             # Point d'entrée
+└── requirements.txt
+```
+
+## 📦 Dépendances principales
+
+- `ortools` — CP-SAT et TSP (Google OR-Tools)
+- `matplotlib` / `seaborn` — Visualisations
+- `numpy` / `pandas` — Calculs numériques
+- `pytest` — Tests unitaires

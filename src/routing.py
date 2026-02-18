@@ -1,6 +1,10 @@
 """
 Route optimisation using OR-Tools TSP solver.
 Also provides a lightweight Nearest-Neighbour fallback.
+
+Key change: agents navigate between pick_points (aisle cells) rather than
+rack locations. Products are picked by reaching the adjacent aisle cell --
+agents never enter the rack cells themselves.
 """
 
 from typing import List, Dict, Tuple
@@ -68,7 +72,6 @@ class RouteOptimizer:
             route.append(manager.IndexToNode(index))
             return route, float(total_distance)
 
-        # Fallback: original order
         route = list(range(len(locations))) + [start_index]
         total_distance = calculate_total_distance(locations, locations[start_index])
         return route, total_distance
@@ -77,43 +80,61 @@ class RouteOptimizer:
         if not orders:
             return {
                 'agent_id': agent.id,
+                'agent_type': agent.type,
                 'orders': [],
                 'route': [],
                 'total_distance': 0,
-                'total_time': 0,
-                'total_cost': 0
+                'travel_time_minutes': 0,
+                'picking_time_minutes': 0,
+                'total_time_minutes': 0,
+                'total_cost_euros': 0,
+                'locations_visited': 0
             }
 
-        all_locations = [self.warehouse.entry_point]
-        location_to_products = {self.warehouse.entry_point: []}
+        # Build route using pick_points instead of rack locations.
+        # The entry point is also a valid aisle cell (0,0).
+        all_pick_points = [self.warehouse.entry_point]
+        pick_point_to_products: Dict[Location, List[Dict]] = {
+            self.warehouse.entry_point: []
+        }
 
         for order in orders:
-            for location in order.get_unique_locations():
-                if location not in all_locations:
-                    all_locations.append(location)
-                    location_to_products[location] = []
-                for item in order.items:
-                    if item.product and item.product.location == location:
-                        location_to_products[location].append({
-                            'order_id': order.id,
-                            'product': item.product,
-                            'quantity': item.quantity
-                        })
+            for item in order.items:
+                if not item.product:
+                    continue
+                pp = item.product.pick_point
+                if pp not in all_pick_points:
+                    all_pick_points.append(pp)
+                    pick_point_to_products[pp] = []
+                pick_point_to_products[pp].append({
+                    'order_id': order.id,
+                    'product': item.product,
+                    'quantity': item.quantity
+                })
 
-        optimal_route, total_distance = self.solve_tsp(all_locations, start_index=0)
+        optimal_route, total_distance = self.solve_tsp(all_pick_points, start_index=0)
 
         detailed_route = []
+        cumulative = 0
         for idx in optimal_route:
-            location = all_locations[idx]
+            pp = all_pick_points[idx]
             detailed_route.append({
-                'location': location,
-                'products': location_to_products.get(location, []),
-                'cumulative_distance': 0
+                'location': pp,
+                'rack_location': None,
+                'products': pick_point_to_products.get(pp, []),
+                'cumulative_distance': cumulative
             })
 
+        # fill in rack_location for display purposes
+        for step in detailed_route:
+            pp = step['location']
+            racks = list({p['product'].location for p in step['products']})
+            step['rack_location'] = racks
+
+        # recalculate cumulative distances correctly
         cumulative = 0
-        for i in range(len(detailed_route)):
-            detailed_route[i]['cumulative_distance'] = cumulative
+        for i, step in enumerate(detailed_route):
+            step['cumulative_distance'] = cumulative
             if i < len(detailed_route) - 1:
                 cumulative += detailed_route[i]['location'].distance_to(
                     detailed_route[i + 1]['location']
@@ -135,7 +156,7 @@ class RouteOptimizer:
             'picking_time_minutes': picking_time,
             'total_time_minutes': total_time,
             'total_cost_euros': total_cost,
-            'locations_visited': len(all_locations) - 1
+            'locations_visited': len(all_pick_points) - 1
         }
 
     def optimize_all_routes(self, agents: List[Agent]) -> List[Dict]:
@@ -183,19 +204,19 @@ def print_route_summary(routes: List[Dict]):
     for info in routes:
         print(f"\nAgent {info['agent_id']} ({info['agent_type']})")
         print(f"  Orders          : {', '.join(info['orders'])}")
-        print(f"  Stops           : {info['locations_visited']}")
-        print(f"  Distance        : {info['total_distance']:.1f}m")
+        print(f"  Pick stops      : {info['locations_visited']}")
+        print(f"  Distance (allée): {info['total_distance']:.1f}m")
         print(f"  Travel time     : {info['travel_time_minutes']:.1f}min")
         print(f"  Picking time    : {info['picking_time_minutes']:.1f}min")
         print(f"  Total time      : {info['total_time_minutes']:.1f}min")
         print(f"  Cost            : {info['total_cost_euros']:.2f}EUR")
 
         route_preview = " -> ".join(
-            str(step['location']) for step in info['route'][:5]
+            f"PP{step['location']}" for step in info['route'][:5]
         )
         if len(info['route']) > 5:
             route_preview += " -> ..."
-        print(f"  Route           : {route_preview}")
+        print(f"  Route (allées)  : {route_preview}")
 
         total_distance += info['total_distance']
         total_time += info['total_time_minutes']
