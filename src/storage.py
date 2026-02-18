@@ -35,6 +35,16 @@ class StorageOptimizer:
                     affinity[pair] += 1
         return dict(affinity)
 
+    def analyze_zone_traffic(self, orders: List[Order]) -> Dict[str, int]:
+        """Count how many times each zone is visited across all orders."""
+        traffic: Dict[str, int] = {}
+        for order in orders:
+            for location in order.get_unique_locations():
+                zone_id = self.warehouse.get_zone_at(location)
+                if zone_id:
+                    traffic[zone_id] = traffic.get(zone_id, 0) + 1
+        return traffic
+
     def get_top_products(self, frequencies: Dict[str, int], n: int = 20) -> List[str]:
         sorted_items = sorted(frequencies.items(), key=lambda x: x[1], reverse=True)
         return [pid for pid, _ in sorted_items[:n]]
@@ -77,7 +87,7 @@ class StorageOptimizer:
             prods_sorted = sorted(
                 prods, key=lambda p: frequencies.get(p.id, 0), reverse=True
             )
-            slots = available_locations[zone_id]
+            slots = available_locations.get(zone_id, [])
             for i, product in enumerate(prods_sorted):
                 new_locations[product.id] = slots[i] if i < len(slots) else product.location
 

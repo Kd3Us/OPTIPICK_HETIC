@@ -18,8 +18,18 @@ class GreedyAllocation:
         return (0 if order.priority == 'express' else 1, order.time_to_deadline())
 
     def allocate(self, agents: List[Agent], orders: List[Order]) -> Dict:
+        # Reset all agents cleanly before allocation
         for agent in agents:
-            agent.reset_load()
+            agent.current_load_weight = 0.0
+            agent.current_load_volume = 0.0
+            agent.current_products = []
+            agent.assigned_orders = []
+
+        # Auto-pair carts with humans before allocation starts
+        free_humans = [a for a in agents if isinstance(a, Human)]
+        for cart in [a for a in agents if isinstance(a, Cart)]:
+            if cart.assigned_human is None and free_humans:
+                cart.assigned_human = free_humans.pop(0)
 
         sorted_orders = sorted(orders, key=self._order_priority)
         sorted_agents = sorted(agents, key=self._agent_priority)
@@ -30,15 +40,6 @@ class GreedyAllocation:
         for order in sorted_orders:
             assigned = False
             for agent in sorted_agents:
-                # carts need a human — auto-pair with first free one
-                if isinstance(agent, Cart) and agent.assigned_human is None:
-                    free_human = next(
-                        (a for a in sorted_agents if isinstance(a, Human) and not a.assigned_orders),
-                        None
-                    )
-                    if free_human:
-                        agent.assigned_human = free_human
-
                 ok, _ = self.checker.can_assign_order(agent, order)
                 if ok:
                     agent.assigned_orders.append(order)
@@ -48,12 +49,19 @@ class GreedyAllocation:
                         if item.product:
                             agent.current_products.extend([item.product] * item.quantity)
                     order.assigned_agent = agent
-                    successful.append({'order_id': order.id, 'agent_id': agent.id, 'agent_type': agent.type})
+                    successful.append({
+                        'order_id': order.id,
+                        'agent_id': agent.id,
+                        'agent_type': agent.type
+                    })
                     assigned = True
                     break
 
             if not assigned:
-                failed.append({'order_id': order.id, 'reason': 'No compatible agent available'})
+                failed.append({
+                    'order_id': order.id,
+                    'reason': 'No compatible agent available'
+                })
 
         return {
             'total_orders': len(orders),

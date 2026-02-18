@@ -12,6 +12,16 @@ from .models import Agent, Order, Warehouse, Robot, Human, Cart
 from .constraints import ConstraintChecker
 
 
+def get_real_cost(agent: Agent) -> float:
+    """
+    Return the real hourly cost of an agent.
+    A cart requires a human operator, so its real cost = cart + human rate.
+    """
+    if isinstance(agent, Cart) and agent.assigned_human is not None:
+        return agent.cost_per_hour + agent.assigned_human.cost_per_hour
+    return agent.cost_per_hour
+
+
 class OptimalAllocator:
 
     def __init__(self, warehouse: Warehouse):
@@ -20,10 +30,30 @@ class OptimalAllocator:
 
     def allocate(self, agents: List[Agent], orders: List[Order],
                  max_time_seconds: int = 30) -> Dict:
-        for agent in agents:
-            agent.reset_load()
 
-        n_agents = len(agents)
+        # Reset agents cleanly
+        for agent in agents:
+            agent.current_load_weight = 0.0
+            agent.current_load_volume = 0.0
+            agent.current_products = []
+            agent.assigned_orders = []
+
+        # Auto-pair carts with humans
+        free_humans = [a for a in agents if isinstance(a, Human)]
+        for cart in [a for a in agents if isinstance(a, Cart)]:
+            if cart.assigned_human is None and free_humans:
+                cart.assigned_human = free_humans.pop(0)
+
+        # Only use agents that can actually operate
+        operational_agents = []
+        for agent in agents:
+            if isinstance(agent, Cart):
+                if agent.is_operational():
+                    operational_agents.append(agent)
+            else:
+                operational_agents.append(agent)
+
+        n_agents = len(operational_agents)
         n_orders = len(orders)
 
         model = cp_model.CpModel()
@@ -35,53 +65,37 @@ class OptimalAllocator:
             for j in range(n_agents)
         }
 
-        # Load variables (scaled x100 to stay integer)
-        load_weight = {
-            j: model.NewIntVar(0, int(agents[j].capacity_weight * 100), f'load_w_{j}')
-            for j in range(n_agents)
-        }
-        load_volume = {
-            j: model.NewIntVar(0, int(agents[j].capacity_volume * 100), f'load_v_{j}')
-            for j in range(n_agents)
-        }
-
         # Each order assigned to exactly one agent
         for i in range(n_orders):
             model.Add(sum(assign[(i, j)] for j in range(n_agents)) == 1)
 
         # Capacity constraints
-        for j in range(n_agents):
+        for j, agent in enumerate(operational_agents):
             model.Add(
-                load_weight[j] == sum(
-                    assign[(i, j)] * int(orders[i].total_weight * 100)
-                    for i in range(n_orders)
-                )
+                sum(assign[(i, j)] * int(orders[i].total_weight * 100)
+                    for i in range(n_orders))
+                <= int(agent.capacity_weight * 100)
             )
-            model.Add(load_weight[j] <= int(agents[j].capacity_weight * 100))
-
             model.Add(
-                load_volume[j] == sum(
-                    assign[(i, j)] * int(orders[i].total_volume * 100)
-                    for i in range(n_orders)
-                )
+                sum(assign[(i, j)] * int(orders[i].total_volume * 100)
+                    for i in range(n_orders))
+                <= int(agent.capacity_volume * 100)
             )
-            model.Add(load_volume[j] <= int(agents[j].capacity_volume * 100))
 
         # Robot-specific hard constraints: ban infeasible (robot, order) pairs
-        for j, agent in enumerate(agents):
+        for j, agent in enumerate(operational_agents):
             if isinstance(agent, Robot):
                 for i, order in enumerate(orders):
                     feasible, _ = self.checker.check_robot_restrictions(agent, order)
                     if not feasible:
                         model.Add(assign[(i, j)] == 0)
 
-        # Objective: minimise weighted agent cost, reward balanced utilisation
+        # Objective: minimise total REAL cost (carts cost cart + human rate)
         objective_terms = []
-        for j, agent in enumerate(agents):
-            cost_factor = int(agent.cost_per_hour)
+        for j, agent in enumerate(operational_agents):
+            real_cost = int(get_real_cost(agent) * 100)
             for i in range(n_orders):
-                objective_terms.append(assign[(i, j)] * cost_factor * 100)
-            objective_terms.append(-load_weight[j])
+                objective_terms.append(assign[(i, j)] * real_cost)
 
         model.Minimize(sum(objective_terms))
 
@@ -99,7 +113,7 @@ class OptimalAllocator:
                 for j in range(n_agents):
                     if solver.Value(assign[(i, j)]) == 1:
                         order = orders[i]
-                        agent = agents[j]
+                        agent = operational_agents[j]
                         agent.assigned_orders.append(order)
                         agent.current_load_weight += order.total_weight
                         agent.current_load_volume += order.total_volume
