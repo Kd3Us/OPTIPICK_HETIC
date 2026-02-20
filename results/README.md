@@ -7,4 +7,4 @@ Ce dossier stocke les résultats des optimisations :
 - `metrics.json` : Métriques de performance
 - Images et graphiques de visualisation
 
-⚠️ Les fichiers de ce dossier sont générés automatiquement.
+Les fichiers de ce dossier sont générés automatiquement.
