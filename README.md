@@ -45,16 +45,8 @@ pytest tests/ -v
 ## 👥 Équipe
 
 - **Lead technique** : Jules
-- **Contraintes & Tests** : [Prénom Collaborateur 1]
-- **Visualisation & Métriques** : [Prénom Collaborateur 2]
-
-## 📅 Planning
-
-- Jour 1 : Architecture & modélisation des données
-- Jour 2 : Contraintes dures & validation
-- Jour 3 : Optimisation TSP des tournées
-- Jour 4 : Allocation optimale CP-SAT
-- Jour 5 : Stockage, visualisation & soutenance
+- **Contraintes & Tests** : Emery
+- **Visualisation & Métriques** : Sarah
 
 ## 📊 Résultats
 
