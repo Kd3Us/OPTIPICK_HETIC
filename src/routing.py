@@ -1,9 +1,13 @@
 """
 Route optimisation using OR-Tools TSP solver.
-Also provides a lightweight Nearest-Neighbour fallback.
+Also provides a lightweight Nearest-Neighbour fallback and a
+CollisionDetector to identify and resolve agent path conflicts.
+
+Aisle-aware routing: agents navigate to the aisle pick point adjacent to
+each rack location, rather than cutting through rack cells directly.
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple, Optional
 import numpy as np
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
@@ -11,14 +15,16 @@ from ortools.constraint_solver import pywrapcp
 from .models import Agent, Order, Location, Warehouse
 from .utils import calculate_total_distance
 
-PICKING_TIME_PER_ITEM = 30  # seconds per product picked
-START_STAGGER_SECONDS = 10  # délai de départ entre agents
-
 
 class RouteOptimizer:
 
     def __init__(self, warehouse: Warehouse):
         self.warehouse = warehouse
+
+    def _pick_point(self, location: Location) -> Location:
+        if self.warehouse.aisles:
+            return self.warehouse.get_pick_point(location)
+        return location
 
     def create_distance_matrix(self, locations: List[Location]) -> np.ndarray:
         n = len(locations)
@@ -36,10 +42,7 @@ class RouteOptimizer:
             return [0, 1, 0], locations[0].distance_to(locations[1]) * 2
 
         distance_matrix = self.create_distance_matrix(locations)
-
-        manager = pywrapcp.RoutingIndexManager(
-            len(distance_matrix), 1, start_index
-        )
+        manager = pywrapcp.RoutingIndexManager(len(distance_matrix), 1, start_index)
         routing = pywrapcp.RoutingModel(manager)
 
         def distance_callback(from_index, to_index):
@@ -75,31 +78,7 @@ class RouteOptimizer:
         total_distance = calculate_total_distance(locations, locations[start_index])
         return route, total_distance
 
-    def _compute_timestamps(self, detailed_route: List[Dict], agent: Agent,
-                            start_offset: float = 0.0) -> List[Dict]:
-        current_time = start_offset
-
-        for i, step in enumerate(detailed_route):
-            if i == 0:
-                step['arrival_time_seconds'] = round(start_offset, 2)
-            else:
-                prev_loc = detailed_route[i - 1]['location']
-                distance = prev_loc.distance_to(step['location'])
-                travel_time = distance / agent.speed
-                current_time += travel_time
-                step['arrival_time_seconds'] = round(current_time, 2)
-
-            n_items = sum(p['quantity'] for p in step['products'])
-            picking_duration = n_items * PICKING_TIME_PER_ITEM
-            step['picking_duration_seconds'] = picking_duration
-            step['departure_time_seconds'] = round(current_time + picking_duration, 2)
-            step['is_picking'] = n_items > 0
-            current_time += picking_duration
-
-        return detailed_route
-
-    def optimize_agent_route(self, agent: Agent, orders: List[Order],
-                             start_offset: float = 0.0) -> Dict:
+    def optimize_agent_route(self, agent: Agent, orders: List[Order]) -> Dict:
         if not orders:
             return {
                 'agent_id': agent.id,
@@ -114,51 +93,44 @@ class RouteOptimizer:
                 'locations_visited': 0
             }
 
-        all_locations = [self.warehouse.entry_point]
-        location_to_products = {self.warehouse.entry_point: []}
+        all_pick_points = [self.warehouse.entry_point]
+        pick_point_to_products: Dict[Location, List[Dict]] = {
+            self.warehouse.entry_point: []
+        }
 
         for order in orders:
-            for location in order.get_unique_locations():
-                if location not in all_locations:
-                    all_locations.append(location)
-                    location_to_products[location] = []
-                for item in order.items:
-                    if item.product and item.product.location == location:
-                        location_to_products[location].append({
-                            'order_id': order.id,
-                            'product': item.product,
-                            'quantity': item.quantity
-                        })
+            for item in order.items:
+                if not item.product:
+                    continue
+                pick_pt = self._pick_point(item.product.location)
+                if pick_pt not in all_pick_points:
+                    all_pick_points.append(pick_pt)
+                    pick_point_to_products[pick_pt] = []
+                pick_point_to_products[pick_pt].append({
+                    'order_id': order.id,
+                    'product': item.product,
+                    'quantity': item.quantity
+                })
 
-        optimal_route, total_distance = self.solve_tsp(all_locations, start_index=0)
+        optimal_route, total_distance = self.solve_tsp(all_pick_points, start_index=0)
 
         detailed_route = []
+        cumulative = 0
         for idx in optimal_route:
-            location = all_locations[idx]
+            location = all_pick_points[idx]
             detailed_route.append({
                 'location': location,
-                'products': location_to_products.get(location, []),
-                'cumulative_distance': 0,
-                'arrival_time_seconds': 0.0,
-                'departure_time_seconds': 0.0,
-                'picking_duration_seconds': 0.0,
-                'is_picking': False
+                'products': pick_point_to_products.get(location, []),
+                'cumulative_distance': cumulative
             })
-
-        cumulative = 0
-        for i in range(len(detailed_route)):
-            detailed_route[i]['cumulative_distance'] = cumulative
-            if i < len(detailed_route) - 1:
-                cumulative += detailed_route[i]['location'].distance_to(
-                    detailed_route[i + 1]['location']
-                )
-
-        detailed_route = self._compute_timestamps(detailed_route, agent, start_offset)
+            if len(detailed_route) < len(optimal_route):
+                next_loc = all_pick_points[optimal_route[len(detailed_route)]]
+                cumulative += location.distance_to(next_loc)
 
         total_items = sum(len(order.items) for order in orders)
         picking_time = total_items * 0.5
         travel_time = (total_distance / agent.speed) / 60
-        total_time = travel_time + picking_time + (start_offset / 60)
+        total_time = travel_time + picking_time
         total_cost = (total_time / 60) * agent.cost_per_hour
 
         return {
@@ -171,18 +143,14 @@ class RouteOptimizer:
             'picking_time_minutes': picking_time,
             'total_time_minutes': total_time,
             'total_cost_euros': total_cost,
-            'locations_visited': len(all_locations) - 1,
-            'start_offset_seconds': start_offset
+            'locations_visited': len(all_pick_points) - 1
         }
 
     def optimize_all_routes(self, agents: List[Agent]) -> List[Dict]:
-        """Optimise les routes avec départs échelonnés pour limiter les conflits."""
         results = []
-        active_agents = [a for a in agents if a.assigned_orders]
-        for idx, agent in enumerate(active_agents):
-            offset = idx * START_STAGGER_SECONDS
-            results.append(self.optimize_agent_route(agent, agent.assigned_orders,
-                                                     start_offset=offset))
+        for agent in agents:
+            if agent.assigned_orders:
+                results.append(self.optimize_agent_route(agent, agent.assigned_orders))
         return results
 
 
@@ -211,226 +179,139 @@ class NearestNeighborTSP:
         return route, total_distance
 
 
-# ---------------------------------------------------------------------------
-# Détection et résolution de collisions (Multi-Agent Path Finding simplifié)
-# ---------------------------------------------------------------------------
-
 class CollisionDetector:
     """
-    Détecte et résout les conflits de position entre agents en mouvement.
+    Detects and resolves spatial conflicts between agent routes.
 
-    Règles :
-      - Le point d'entrée (0,0) est une zone libre : pas de conflit possible.
-      - Deux agents en picking au même rayon simultanément : acceptable.
-      - Edge conflict uniquement entre deux agents tous les deux en mouvement.
-      - Agent ayant terminé sa tournée : plus dans l'entrepôt.
+    Strategy:
+    - Build a timeline of (agent, time_step, location) events.
+    - Flag any two agents occupying the same cell at the same time.
+    - Resolve conflicts by adding a small departure delay to the
+      lower-priority agent (robots yield to humans/carts).
     """
 
     def __init__(self, time_step: float = 1.0):
         self.time_step = time_step
 
-    def _build_timeline(self, route_result: Dict) -> List[Tuple[float, float, Location, bool]]:
-        return [
-            (
-                step['arrival_time_seconds'],
-                step['departure_time_seconds'],
-                step['location'],
-                step.get('is_picking', False)
-            )
-            for step in route_result['route']
-        ]
-
-    def _finish_time(self, timeline: List) -> float:
-        return timeline[-1][1] if timeline else 0.0
-
-    def _state_at(self, timeline: List, finish: float,
-                  t: float) -> Optional[Tuple[Location, bool]]:
-        if t > finish:
-            return None
-        for i, (arrival, departure, loc, picking) in enumerate(timeline):
-            if arrival <= t <= departure:
-                return (loc, picking)
-            if i + 1 < len(timeline):
-                next_arrival = timeline[i + 1][0]
-                if departure < t < next_arrival:
-                    return (timeline[i + 1][2], False)
-        return None
-
-    def detect_collisions(self, route_results: List[Dict]) -> List[Dict]:
-        if not route_results:
+    def _build_timeline(self, route_info: Dict) -> List[Tuple[float, Location]]:
+        route = route_info.get('route', [])
+        if not route:
             return []
 
-        entry = None
-        for r in route_results:
-            if r['route']:
-                entry = r['route'][0]['location']
-                break
+        timeline = []
+        current_time = 0.0
+        travel_time_total = max(route_info.get('travel_time_minutes', 1), 0.001)
+        total_distance = max(route_info.get('total_distance', 1), 0.001)
+        speed_cells_per_min = total_distance / travel_time_total
 
-        timelines = {}
-        finish_times = {}
-        for r in route_results:
-            tl = self._build_timeline(r)
-            timelines[r['agent_id']] = tl
-            finish_times[r['agent_id']] = self._finish_time(tl)
+        for i in range(len(route) - 1):
+            loc_a = route[i]['location']
+            loc_b = route[i + 1]['location']
+            dist = loc_a.distance_to(loc_b)
 
-        max_time = max(finish_times.values()) if finish_times else 0.0
-        agent_ids = list(timelines.keys())
+            n_products = len(route[i]['products'])
+            dwell = n_products * 0.5
+            timeline.append((current_time, loc_a))
+            current_time += dwell
+
+            travel_time = dist / max(speed_cells_per_min, 0.001)
+            steps = max(int(travel_time / self.time_step), 1)
+            for s in range(1, steps + 1):
+                frac = s / steps
+                interp_x = round(loc_a.x + frac * (loc_b.x - loc_a.x))
+                interp_y = round(loc_a.y + frac * (loc_b.y - loc_a.y))
+                timeline.append((current_time + frac * travel_time, Location(interp_x, interp_y)))
+            current_time += travel_time
+
+        if route:
+            timeline.append((current_time, route[-1]['location']))
+
+        return timeline
+
+    def detect_collisions(self, route_results: List[Dict]) -> List[Dict]:
+        """
+        Detect all space-time conflicts between agents.
+        Returns a list of conflict dicts: agent_a, agent_b, time_minutes, location.
+        """
+        timelines: Dict[str, List[Tuple[float, Location]]] = {}
+        for r in route_results:
+            timelines[r['agent_id']] = self._build_timeline(r)
+
         conflicts = []
+        agent_ids = list(timelines.keys())
 
-        # Vertex conflicts
-        t = 0.0
-        while t <= max_time:
-            states = {
-                aid: self._state_at(timelines[aid], finish_times[aid], t)
-                for aid in agent_ids
-            }
-            for i, a1 in enumerate(agent_ids):
-                for a2 in agent_ids[i + 1:]:
-                    s1, s2 = states[a1], states[a2]
-                    if s1 is None or s2 is None:
-                        continue
-                    loc1, picking1 = s1
-                    loc2, picking2 = s2
-                    if loc1 != loc2 or loc1 == entry:
-                        continue
-                    if picking1 and picking2:
-                        continue  # picking simultané sur le même rayon : acceptable
-                    conflicts.append({
-                        'type': 'vertex',
-                        'time': round(t, 1),
-                        'agents': [a1, a2],
-                        'location': loc1
-                    })
-            t += self.time_step
+        for i in range(len(agent_ids)):
+            for j in range(i + 1, len(agent_ids)):
+                a_id = agent_ids[i]
+                b_id = agent_ids[j]
+                tl_a = timelines[a_id]
+                tl_b = timelines[b_id]
 
-        # Edge conflicts — uniquement entre agents en mouvement
-        t = 0.0
-        while t + self.time_step <= max_time:
-            t_next = t + self.time_step
-            for i, a1 in enumerate(agent_ids):
-                for a2 in agent_ids[i + 1:]:
-                    s1_now  = self._state_at(timelines[a1], finish_times[a1], t)
-                    s1_next = self._state_at(timelines[a1], finish_times[a1], t_next)
-                    s2_now  = self._state_at(timelines[a2], finish_times[a2], t)
-                    s2_next = self._state_at(timelines[a2], finish_times[a2], t_next)
-
-                    if None in (s1_now, s1_next, s2_now, s2_next):
-                        continue
-
-                    l1_now, p1_now = s1_now
-                    l1_next, _     = s1_next
-                    l2_now, p2_now = s2_now
-                    l2_next, _     = s2_next
-
-                    if p1_now or p2_now:
-                        continue  # agent immobile : pas de croisement possible
-
-                    if l1_now == l2_next and l2_now == l1_next and l1_now != entry:
+                a_positions: Dict[int, Location] = {
+                    int(t / self.time_step): loc for t, loc in tl_a
+                }
+                for t, loc in tl_b:
+                    bucket = int(t / self.time_step)
+                    if bucket in a_positions and a_positions[bucket] == loc:
                         conflicts.append({
-                            'type': 'edge',
-                            'time': round(t, 1),
-                            'agents': [a1, a2],
-                            'location': None
+                            'agent_a': a_id,
+                            'agent_b': b_id,
+                            'time_minutes': round(t, 2),
+                            'location': loc
                         })
-            t += self.time_step
+                        break
 
-        # Dédoublonnage : un conflit par (type, agents, fenêtre de 5s)
-        unique = []
-        seen = set()
-        for c in conflicts:
-            key = (c['type'], tuple(sorted(c['agents'])), int(c['time'] / 5))
-            if key not in seen:
-                seen.add(key)
-                unique.append(c)
+        return conflicts
 
-        return unique
-
-    def resolve_with_delays(self, route_results: List[Dict]) -> List[Dict]:
+    def resolve_with_delays(self, route_results: List[Dict],
+                            delay_minutes: float = 2.0) -> List[Dict]:
         """
-        Résolution itérative par délais.
-        Si la résolution augmente le nombre de conflits, on abandonne et on
-        garde la version avec le moins de conflits.
+        Resolve conflicts by delaying lower-priority agents.
+        Priority: human > cart > robot.
         """
-        results_by_id = {r['agent_id']: r for r in route_results}
-        delay = START_STAGGER_SECONDS
-        max_iterations = 50
+        conflicts = self.detect_collisions(route_results)
+        if not conflicts:
+            return route_results
 
-        initial_conflicts = self.detect_collisions(list(results_by_id.values()))
-        best_count = len(initial_conflicts)
-        best_state = {aid: {
-            'route': [step.copy() for step in r['route']],
-            'total_time_minutes': r['total_time_minutes']
-        } for aid, r in results_by_id.items()}
+        priority = {'human': 0, 'cart': 1, 'robot': 2}
+        agents_to_delay = set()
 
-        for _ in range(max_iterations):
-            conflicts = self.detect_collisions(list(results_by_id.values()))
-            vertex_conflicts = [c for c in conflicts if c['type'] == 'vertex']
+        for conflict in conflicts:
+            type_a = next((r['agent_type'] for r in route_results
+                           if r['agent_id'] == conflict['agent_a']), 'robot')
+            type_b = next((r['agent_type'] for r in route_results
+                           if r['agent_id'] == conflict['agent_b']), 'robot')
 
-            if not vertex_conflicts:
-                break
+            if priority.get(type_a, 99) >= priority.get(type_b, 99):
+                agents_to_delay.add(conflict['agent_a'])
+            else:
+                agents_to_delay.add(conflict['agent_b'])
 
-            # Sauvegarder le meilleur état observé
-            if len(conflicts) < best_count:
-                best_count = len(conflicts)
-                best_state = {aid: {
-                    'route': [step.copy() for step in r['route']],
-                    'total_time_minutes': r['total_time_minutes']
-                } for aid, r in results_by_id.items()}
+        updated = []
+        for r in route_results:
+            if r['agent_id'] in agents_to_delay:
+                r = dict(r)
+                r['travel_time_minutes'] = r.get('travel_time_minutes', 0) + delay_minutes
+                r['total_time_minutes'] = r.get('total_time_minutes', 0) + delay_minutes
+                cost_per_min = (r.get('total_cost_euros', 0) /
+                                max(r.get('total_time_minutes', 1) - delay_minutes, 0.001) / 60)
+                r['total_cost_euros'] = cost_per_min * r['total_time_minutes'] * 60
+            updated.append(r)
 
-            conflict = vertex_conflicts[0]
-            agent_to_delay = conflict['agents'][1]
-            conflict_time = conflict['time']
-
-            if agent_to_delay not in results_by_id:
-                continue
-
-            for step in results_by_id[agent_to_delay]['route']:
-                if step['arrival_time_seconds'] >= conflict_time:
-                    step['arrival_time_seconds']   = round(step['arrival_time_seconds'] + delay, 2)
-                    step['departure_time_seconds'] = round(step['departure_time_seconds'] + delay, 2)
-
-            route = results_by_id[agent_to_delay]['route']
-            if route:
-                results_by_id[agent_to_delay]['total_time_minutes'] = round(
-                    route[-1]['departure_time_seconds'] / 60, 2
-                )
-
-        # Vérifier si la résolution a empiré les choses
-        final_conflicts = self.detect_collisions(list(results_by_id.values()))
-        if len(final_conflicts) > best_count:
-            # Restaurer le meilleur état observé
-            for aid, state in best_state.items():
-                results_by_id[aid]['route'] = state['route']
-                results_by_id[aid]['total_time_minutes'] = state['total_time_minutes']
-            print(f"  Resolution abandonnee : retour au meilleur etat ({best_count} conflits)")
-
-        return list(results_by_id.values())
+        return updated
 
     def print_collision_report(self, conflicts: List[Dict]):
         print("\n" + "=" * 60)
         print("COLLISION REPORT")
         print("=" * 60)
-
         if not conflicts:
             print("  Aucun conflit detecte.")
-            print("=" * 60)
-            return
-
-        vertex_conflicts = [c for c in conflicts if c['type'] == 'vertex']
-        edge_conflicts   = [c for c in conflicts if c['type'] == 'edge']
-
-        print(f"  Conflits vertex : {len(vertex_conflicts)}")
-        print(f"  Conflits arete  : {len(edge_conflicts)}")
-        print()
-
-        for c in conflicts[:20]:
-            agents_str = " vs ".join(c['agents'])
-            loc_str = str(c['location']) if c['location'] else "croisement"
-            print(f"  [{c['type']:6s}]  t={c['time']:6.1f}s  {agents_str}  @{loc_str}")
-
-        if len(conflicts) > 20:
-            print(f"  ... et {len(conflicts) - 20} autres (non affiches)")
-
+        else:
+            print(f"  {len(conflicts)} conflit(s) detecte(s) :")
+            for c in conflicts:
+                print(f"  - {c['agent_a']} vs {c['agent_b']} "
+                      f"@ t={c['time_minutes']}min "
+                      f"en {c['location']}")
         print("=" * 60)
 
 
@@ -444,9 +325,7 @@ def print_route_summary(routes: List[Dict]):
     total_cost = 0.0
 
     for info in routes:
-        offset = info.get('start_offset_seconds', 0)
-        offset_str = f" (depart +{offset:.0f}s)" if offset > 0 else ""
-        print(f"\nAgent {info['agent_id']} ({info['agent_type']}){offset_str}")
+        print(f"\nAgent {info['agent_id']} ({info['agent_type']})")
         print(f"  Orders          : {', '.join(info['orders'])}")
         print(f"  Stops           : {info['locations_visited']}")
         print(f"  Distance        : {info['total_distance']:.1f}m")

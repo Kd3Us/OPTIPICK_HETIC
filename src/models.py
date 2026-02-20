@@ -6,7 +6,7 @@ Classes:
     Product    -- warehouse product with attributes
     Agent      -- base class for all agents (Robot, Human, Cart)
     Order      -- customer order with item list
-    Warehouse  -- warehouse structure with zones
+    Warehouse  -- warehouse structure with zones and aisles
 """
 
 from typing import List, Tuple, Dict, Optional
@@ -42,12 +42,12 @@ class Product:
     weight: float
     volume: float
     location: Location
-    pick_point: Location          # aisle cell where agent stands to pick this product
     frequency: str
-    fragile: bool
+    fragile: bool = False
     incompatible_with: List[str] = field(default_factory=list)
 
     def is_compatible_with(self, other: 'Product') -> bool:
+        """Bidirectional incompatibility check."""
         return (other.id not in self.incompatible_with and
                 self.id not in other.incompatible_with)
 
@@ -167,20 +167,11 @@ class Order:
         return [(item.product, item.quantity) for item in self.items if item.product]
 
     def get_unique_locations(self) -> List[Location]:
-        """Returns the physical rack locations of all products in this order."""
         locations = set()
         for item in self.items:
             if item.product:
                 locations.add(item.product.location)
         return list(locations)
-
-    def get_unique_pick_points(self) -> List[Location]:
-        """Returns the aisle pick points where agents actually stand to collect products."""
-        pick_points = set()
-        for item in self.items:
-            if item.product:
-                pick_points.add(item.product.pick_point)
-        return list(pick_points)
 
     def has_incompatibilities(self) -> bool:
         products = [item.product for item in self.items if item.product]
@@ -219,6 +210,35 @@ class Warehouse:
     zones: Dict[str, Zone] = field(default_factory=dict)
     aisles: List[Location] = field(default_factory=list)
 
+    def is_aisle(self, location: Location) -> bool:
+        """Check if a location is a navigable aisle cell."""
+        return location in self.aisles
+
+    def get_pick_point(self, product_location: Location) -> Location:
+        """
+        Return the nearest aisle cell adjacent to a rack location.
+        Agents navigate to this pick point to collect the product,
+        rather than entering the rack itself.
+        """
+        if not self.aisles:
+            return product_location
+
+        aisle_set = set(self.aisles)
+        # Check the 4 cardinal neighbours of the product location
+        neighbours = [
+            Location(product_location.x - 1, product_location.y),
+            Location(product_location.x + 1, product_location.y),
+            Location(product_location.x, product_location.y - 1),
+            Location(product_location.x, product_location.y + 1),
+        ]
+        aisle_neighbours = [loc for loc in neighbours if loc in aisle_set]
+        if aisle_neighbours:
+            # Return the aisle neighbour closest to the entry point
+            return min(aisle_neighbours, key=lambda loc: self.entry_point.distance_to(loc))
+
+        # Fallback: nearest aisle cell by Manhattan distance
+        return min(self.aisles, key=lambda loc: product_location.distance_to(loc))
+
     def get_zone_at(self, location: Location) -> Optional[str]:
         for zone_id, zone in self.zones.items():
             if zone.contains(location):
@@ -231,8 +251,7 @@ class Warehouse:
             return self.zones[zone_id].type
         return None
 
-    def is_aisle(self, location: Location) -> bool:
-        return location in self.aisles
-
     def __repr__(self):
-        return f"Warehouse({self.width}x{self.height}, {len(self.zones)} zones)"
+        return (f"Warehouse({self.width}x{self.height}, "
+                f"{len(self.zones)} zones, "
+                f"{len(self.aisles)} aisle cells)")

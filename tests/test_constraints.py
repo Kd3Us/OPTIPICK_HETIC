@@ -56,7 +56,7 @@ class TestCapacity:
 
     def test_exactly_at_capacity(self, checker):
         agent = Robot("R1", 20, 30, 2.0, 5, {})
-        product = Product("P001", "Exact", "cat", 10.0, 15.0, Location(1, 1), "high", False, [])
+        product = Product("P001", "A", "cat", 10.0, 15.0, Location(1, 1), "high", False, [])
         order = Order("O001", "08:00", "10:00", "standard",
                       items=[OrderItem("P001", 2, product)])
         order.calculate_totals()
@@ -80,7 +80,7 @@ class TestProductCompatibility:
         assert "incompatible" in msg.lower()
 
     def test_single_product_always_compatible(self, checker):
-        p1 = Product("P001", "A", "chemical", 1.0, 1.0, Location(0, 0), "high", False, ["P002"])
+        p1 = Product("P001", "A", "cat", 1.0, 1.0, Location(0, 0), "high", False, ["P002"])
         ok, _ = checker.check_product_compatibility([p1])
         assert ok is True
 
@@ -89,6 +89,7 @@ class TestProductCompatibility:
         p2 = Product("P002", "B", "cat", 1.0, 1.0, Location(1, 1), "high", False, ["P001"])
         ok, msg = checker.check_product_compatibility([p1, p2])
         assert ok is False
+        assert "incompatible" in msg.lower()
 
 
 class TestRobotRestrictions:
@@ -122,7 +123,7 @@ class TestRobotRestrictions:
 
     def test_allowed_zone_accepted(self, checker):
         robot = Robot("R1", 20, 30, 2.0, 5, {'no_zones': ['C']})
-        product = Product("P001", "Cable", "electronics", 0.1, 0.5, Location(1, 1), "high", False, [])
+        product = Product("P001", "USB", "electronics", 0.5, 1.0, Location(1, 1), "high", False, [])
         order = Order("O001", "08:00", "10:00", "standard",
                       items=[OrderItem("P001", 1, product)])
         ok, _ = checker.check_robot_restrictions(robot, order)

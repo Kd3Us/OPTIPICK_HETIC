@@ -20,6 +20,7 @@ from .models import (
 
 
 def load_warehouse(filepath: str) -> Warehouse:
+    """Load warehouse configuration from JSON file."""
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -35,6 +36,8 @@ def load_warehouse(filepath: str) -> Warehouse:
             restrictions=zone_data.get('restrictions', [])
         )
 
+    # Load aisle cells if defined — agents navigate only through aisles,
+    # they never cut through rack areas.
     aisles = [Location(x, y) for x, y in data.get('aisles', [])]
 
     return Warehouse(
@@ -47,19 +50,13 @@ def load_warehouse(filepath: str) -> Warehouse:
 
 
 def load_products(filepath: str) -> List[Product]:
+    """Load product list from JSON file."""
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     products = []
     for item in data:
         location = Location(item['location'][0], item['location'][1])
-
-        # pick_point: use explicit value if present, otherwise fall back to location itself
-        if 'pick_point' in item:
-            pick_point = Location(item['pick_point'][0], item['pick_point'][1])
-        else:
-            pick_point = location
-
         products.append(Product(
             id=item['id'],
             name=item['name'],
@@ -67,7 +64,6 @@ def load_products(filepath: str) -> List[Product]:
             weight=item['weight'],
             volume=item['volume'],
             location=location,
-            pick_point=pick_point,
             frequency=item['frequency'],
             fragile=item['fragile'],
             incompatible_with=item.get('incompatible_with', [])
@@ -77,6 +73,7 @@ def load_products(filepath: str) -> List[Product]:
 
 
 def load_agents(filepath: str) -> List[Agent]:
+    """Load agents from JSON file."""
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -120,6 +117,7 @@ def load_agents(filepath: str) -> List[Agent]:
 
 
 def load_orders(filepath: str, products: List[Product]) -> List[Order]:
+    """Load orders from JSON file, resolving product references."""
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -150,6 +148,7 @@ def load_orders(filepath: str, products: List[Product]) -> List[Order]:
 
 
 def load_all_data(data_dir: str = 'data') -> Dict:
+    """Load all project data in one call."""
     data_path = Path(data_dir)
 
     warehouse = load_warehouse(str(data_path / 'warehouse.json'))
